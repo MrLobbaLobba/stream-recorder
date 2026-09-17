@@ -1,0 +1,23 @@
+# Virtual environments
+.venv/
+env/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Captures and media
+captures/
+*.ts
+*.mp4
+*.m4s
+*.jpg
+*.png
+!assets/*.png
+
+# Local backups and scratch
+requirements.txt.bak
+fanslymonitor.py
+.gemini/

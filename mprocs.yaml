@@ -1,0 +1,6 @@
+procs:
+  fansly_model:
+    shell: "python fansly-recorder.py fansly_username"
+  joystick_model:
+    shell: "python joystick-recorder.py joystick_username"
+
