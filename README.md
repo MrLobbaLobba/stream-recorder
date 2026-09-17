@@ -206,9 +206,9 @@ Launch streamers in decoupled background sessions using [`start.sh`](file:///hom
 To track multiple streamers across both platforms at the same time:
 1. Edit [`captures/list`](file:///home/skandergod/Workbench/stream-recorder/captures/list):
    ```bash
-   sh start.sh MizugiBuns joystick
-   sh start.sh TaigaTorayami fansly
-   sh start.sh UndyneAra fansly
+   sh start.sh <username1> joystick
+   sh start.sh <username2> fansly
+   sh start.sh <username3> fansly
    ```
 2. Run the list script:
    ```bash
@@ -217,9 +217,9 @@ To track multiple streamers across both platforms at the same time:
 
 #### Helpful Linux `tmux` Commands:
 * **List active sessions**: `tmux ls`
-* **Attach to live console**: `tmux attach -t MizugiBuns-joystick`
+* **Attach to live console**: `tmux attach -t <username>-<platform>` (e.g. `tmux attach -t <username>-joystick`)
 * **Detach without closing**: Press `Ctrl + B`, release both keys, then press `D`.
-* **Stop a streamer session**: `tmux kill-session -t MizugiBuns-joystick`
+* **Stop a streamer session**: `tmux kill-session -t <username>-<platform>`
 
 #### Option C: Direct Console Execution
 ```bash
@@ -257,9 +257,9 @@ python fansly-recorder.py <username>
 1. **Using Separate PowerShell Windows**:
    Launch multiple background windows that stay open and monitor continuously:
    ```powershell
-   Start-Process python -ArgumentList "joystick-recorder.py MizugiBuns"
-   Start-Process python -ArgumentList "fansly-recorder.py TaigaTorayami"
-   Start-Process python -ArgumentList "fansly-recorder.py UndyneAra"
+   Start-Process python -ArgumentList "joystick-recorder.py <username1>"
+   Start-Process python -ArgumentList "fansly-recorder.py <username2>"
+   Start-Process python -ArgumentList "fansly-recorder.py <username3>"
    ```
 
 2. **Using `mprocs` (Terminal Multiplexer for Windows & Linux)**:
@@ -267,10 +267,10 @@ python fansly-recorder.py <username>
    * Edit [`mprocs.yaml`](file:///home/skandergod/Workbench/stream-recorder/mprocs.yaml) with your desired streamers:
      ```yaml
      procs:
-       MizugiBuns:
-         shell: "python joystick-recorder.py MizugiBuns"
-       TaigaTorayami:
-         shell: "python fansly-recorder.py TaigaTorayami"
+       streamer_one:
+         shell: "python joystick-recorder.py <username1>"
+       streamer_two:
+         shell: "python fansly-recorder.py <username2>"
      ```
    * Run `mprocs` to monitor all streamers side-by-side in one window.
 
