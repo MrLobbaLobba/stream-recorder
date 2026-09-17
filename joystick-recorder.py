@@ -3,6 +3,7 @@ from datetime import datetime
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -10,6 +11,21 @@ import time
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
+
+SHUTDOWN_REQUESTED = False
+
+def handle_shutdown_signal(signum, frame):
+    global SHUTDOWN_REQUESTED
+    print(f"\n[info] Stop signal received ({signum}). Finishing recording and generating MP4 with moov atom...", flush=True)
+    SHUTDOWN_REQUESTED = True
+
+try:
+    signal.signal(signal.SIGINT, handle_shutdown_signal)
+    signal.signal(signal.SIGTERM, handle_shutdown_signal)
+    if hasattr(signal, "SIGBREAK"):
+        signal.signal(signal.SIGBREAK, handle_shutdown_signal)
+except Exception:
+    pass
 
 from discord_webhook import DiscordWebhook, DiscordEmbed
 import config
@@ -224,9 +240,29 @@ async def recordLiveStream(filename, data):
                 print(f"[warning] Could not fetch video initialization segment. Aborting stream.")
                 return None
 
-            # Launch separate FFmpeg pipes for Video and Audio
-            proc_v = subprocess.Popen(["ffmpeg", "-i", "pipe:0", "-c", "copy", "-loglevel", "warning", "-y", temp_v], stdin=subprocess.PIPE)
-            proc_a = subprocess.Popen(["ffmpeg", "-i", "pipe:0", "-c", "copy", "-loglevel", "warning", "-y", temp_a], stdin=subprocess.PIPE) if a_init else None
+            # Launch separate FFmpeg pipes for Video and Audio with fragmented MP4
+            # (frag_keyframe+empty_moov writes initial moov header and self-contained fragments so streams are never corrupted if stopped abruptly)
+            ffmpeg_v_cmd = [
+                "ffmpeg",
+                "-i", "pipe:0",
+                "-c", "copy",
+                "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+                "-loglevel", "warning",
+                "-y",
+                temp_v
+            ]
+            ffmpeg_a_cmd = [
+                "ffmpeg",
+                "-i", "pipe:0",
+                "-c", "copy",
+                "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+                "-loglevel", "warning",
+                "-y",
+                temp_a
+            ]
+
+            proc_v = subprocess.Popen(ffmpeg_v_cmd, stdin=subprocess.PIPE)
+            proc_a = subprocess.Popen(ffmpeg_a_cmd, stdin=subprocess.PIPE) if a_init else None
 
             # Write init headers
             proc_v.stdin.write(v_init.content)
@@ -240,6 +276,10 @@ async def recordLiveStream(filename, data):
 
             # 2. Continuous parallel segment download loop
             while True:
+                if SHUTDOWN_REQUESTED:
+                    print("\n[info] Stop requested by user. Finishing capture and finalizing MP4...", flush=True)
+                    break
+
                 try:
                     new_segments_found = False
 
@@ -295,23 +335,34 @@ async def recordLiveStream(filename, data):
 
                 await asyncio.sleep(2.0)
 
-            # Finalize and close both raw streams
+            # Finalize and flush both FFmpeg streams
+            print("\n[recorder] Flushing FFmpeg streams...", flush=True)
             try:
-                proc_v.stdin.close()
-                proc_v.wait()
-            except Exception:
-                pass
-
-            if proc_a:
+                if proc_v and proc_v.stdin:
+                    proc_v.stdin.close()
+                    proc_v.wait(timeout=15)
+            except Exception as e:
+                print(f"[warning] Video FFmpeg close error: {e}", flush=True)
                 try:
-                    proc_a.stdin.close()
-                    proc_a.wait()
+                    proc_v.terminate()
                 except Exception:
                     pass
 
-    # Merge Video + Audio into final MP4
-    if os.path.exists(temp_v) and os.path.exists(temp_a) and os.path.getsize(temp_a) > 0:
-        print(f"\n[recorder] Finalizing: Muxing synchronized video and audio into {final_mp4}...", flush=True)
+            if proc_a:
+                try:
+                    if proc_a.stdin:
+                        proc_a.stdin.close()
+                        proc_a.wait(timeout=15)
+                except Exception as e:
+                    print(f"[warning] Audio FFmpeg close error: {e}", flush=True)
+                    try:
+                        proc_a.terminate()
+                    except Exception:
+                        pass
+
+    # Merge Video + Audio into final MP4 with moov atom at beginning (+faststart)
+    if os.path.exists(temp_v) and os.path.exists(temp_a) and os.path.getsize(temp_a) > 0 and os.path.getsize(temp_v) > 0:
+        print(f"\n[recorder] Finalizing: Muxing video and audio into {final_mp4} with moov atom (+faststart)...", flush=True)
         mux_cmd = [
             "ffmpeg",
             "-i", temp_v,
@@ -323,16 +374,43 @@ async def recordLiveStream(filename, data):
             "-y",
             final_mp4
         ]
-        subprocess.run(mux_cmd, check=True)
-        
-        # Remove temporary raw track files
         try:
-            os.remove(temp_v)
-            os.remove(temp_a)
-        except OSError:
-            pass
-    elif os.path.exists(temp_v):
-        os.rename(temp_v, final_mp4)
+            subprocess.run(mux_cmd, check=True)
+            if os.path.exists(final_mp4) and os.path.getsize(final_mp4) > 0:
+                print(f"[recorder] Final MP4 generated successfully: {final_mp4}", flush=True)
+                try:
+                    os.remove(temp_v)
+                    os.remove(temp_a)
+                except OSError:
+                    pass
+        except Exception as e:
+            print(f"[warning] FFmpeg mux error: {e}. Raw fragmented MP4 tracks preserved: {temp_v}, {temp_a}", flush=True)
+    elif os.path.exists(temp_v) and os.path.getsize(temp_v) > 0:
+        print(f"\n[recorder] Finalizing: Remuxing video into {final_mp4} with moov atom (+faststart)...", flush=True)
+        remux_cmd = [
+            "ffmpeg",
+            "-i", temp_v,
+            "-c", "copy",
+            "-movflags", "+faststart",
+            "-loglevel", "warning",
+            "-y",
+            final_mp4
+        ]
+        try:
+            subprocess.run(remux_cmd, check=True)
+            if os.path.exists(final_mp4) and os.path.getsize(final_mp4) > 0:
+                print(f"[recorder] Final MP4 generated successfully: {final_mp4}", flush=True)
+                try:
+                    os.remove(temp_v)
+                except OSError:
+                    pass
+        except Exception as e:
+            print(f"[warning] FFmpeg remux error: {e}. Preserving {temp_v}", flush=True)
+            if not os.path.exists(final_mp4):
+                try:
+                    os.rename(temp_v, final_mp4)
+                except Exception:
+                    pass
 
     final_size_mb = os.path.getsize(final_mp4) / (1024 * 1024) if os.path.exists(final_mp4) else 0
     print(f"[recorder] Recording complete: {final_mp4} ({final_size_mb:.1f} MB)", flush=True)
@@ -455,6 +533,10 @@ async def startRecording(data):
 
     # 1. Record live stream directly to MP4
     mp4_filename = await recordLiveStream(filename, data)
+    if not mp4_filename or not os.path.exists(mp4_filename):
+        print(f"[info] No recording file generated for {username}")
+        await asyncio.sleep(checkTimeout)
+        return
 
     # 2. Optional contact sheet
     contact_sheet_filename = None
@@ -479,6 +561,10 @@ async def Start():
     print(f"[info] Starting Joystick.tv monitor for '{username}'")
 
     while True:
+        if SHUTDOWN_REQUESTED:
+            print(f"[info] Stopping monitor loop for '{username}'.")
+            break
+
         try:
             data = await getChannelData(username)
 
@@ -487,6 +573,9 @@ async def Start():
                 if getattr(config.webhooks, "enabled", False):
                     await sendWebhookLive(data)
                 await startRecording(data)
+                if SHUTDOWN_REQUESTED:
+                    print(f"[info] Stop requested during recording. Exiting monitor for '{username}'.")
+                    break
             else:
                 status_msg = data.get("error", "offline")
                 print(f"[info] {username} is {status_msg}, checking again in {checkTimeout}s")
@@ -500,5 +589,5 @@ async def Start():
 if __name__ == "__main__":
     try:
         asyncio.run(Start())
-    except KeyboardInterrupt:
-        print("\n[info] Exiting monitor.")
+    except (KeyboardInterrupt, SystemExit):
+        print("\n[info] Exiting monitor cleanly.")
