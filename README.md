@@ -372,6 +372,8 @@ for /r "captures" %i in (*.mp4) do @if not "%~ni"=="*tmp" if not "%~ni"=="*_comp
 ## 5. Disclaimer & Project Vibe
 
 > [!NOTE]
+> **Stream Resilience & `moov` Atom Handling**: Both recorders (`joystick-recorder.py` and `fansly-recorder.py`) are engineered to guarantee that recorded `.mp4` videos are always 100% playable and corruption-free. Live captures on Joystick utilize fragmented MP4 (`frag_keyframe+empty_moov+default_base_moof`) so that video and audio headers are valid and self-contained from the very first second. Furthermore, whenever you stop a recording (`Ctrl+C`, `SIGINT`, `SIGTERM`, or `SIGBREAK`), both scripts intercept the signal gracefully, cleanly flush FFmpeg streams, and automatically finalize the video with `-movflags +faststart`—placing the `moov` atom at the very beginning of the `.mp4` file for instantaneous playback and streaming in any media player or browser.
+>
 > This codebase was built and iterated through **vibecoding** ✨. While it may not feature enterprise-grade architecture or formal test suites, it is practical, battle-tested, and fully functional for amateur and hobbyist stream archivers looking to reliably record their favorite creators without hassle.
 
 * Fansly is operated by Select Media LLC.
