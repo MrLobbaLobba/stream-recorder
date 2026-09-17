@@ -21,6 +21,12 @@ captures/*
 # Logs
 *.log
 
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+
 # Local backups and scratch
 requirements.txt.bak
 fanslymonitor.py
