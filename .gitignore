@@ -11,6 +11,7 @@ __pycache__/
 # Captures and media
 captures/*
 !captures/list
+!captures/list.example
 *.ts
 *.mp4
 *.m4s
@@ -32,3 +33,5 @@ requirements.txt.bak
 fanslymonitor.py
 .gemini/
 .entroly/
+.agents/
+openspec/

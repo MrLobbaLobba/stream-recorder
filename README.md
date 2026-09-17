@@ -50,7 +50,7 @@ Before running the recorder, make sure your system meets the following requireme
 
 2. **Clone the repository**:
    ```bash
-   git clone https://github.com/Skandergod/stream-recorder.git
+   git clone https://github.com/MrLobbaLobba/stream-recorder.git
    cd stream-recorder
    ```
 
@@ -88,7 +88,7 @@ Before running the recorder, make sure your system meets the following requireme
 
 3. **Clone the repository**:
    ```powershell
-   git clone https://github.com/Skandergod/stream-recorder.git
+   git clone https://github.com/MrLobbaLobba/stream-recorder.git
    cd stream-recorder
    ```
 
@@ -191,7 +191,7 @@ JOYSTICK_COOKIE_STR="cf_clearance=...; application=...; user=..."
 ### Running on Linux
 
 #### Option A: Background Execution with `tmux` (Recommended)
-Launch streamers in decoupled background sessions using [`start.sh`](file:///home/skandergod/Workbench/stream-recorder/start.sh):
+Launch streamers in decoupled background sessions using [`start.sh`](start.sh):
 ```bash
 # Track Joystick.tv streamer
 ./start.sh <username> joystick
@@ -204,7 +204,7 @@ Launch streamers in decoupled background sessions using [`start.sh`](file:///hom
 
 #### Option B: Multi-Streamer Monitoring via `captures/list`
 To track multiple streamers across both platforms at the same time:
-1. Edit [`captures/list`](file:///home/skandergod/Workbench/stream-recorder/captures/list):
+1. Edit [`captures/list`](captures/list):
    ```bash
    sh start.sh <username1> joystick
    sh start.sh <username2> fansly
@@ -264,7 +264,7 @@ python fansly-recorder.py <username>
 
 2. **Using `mprocs` (Terminal Multiplexer for Windows & Linux)**:
    * Install `mprocs`: `winget install mprocs` or `choco install mprocs`
-   * Edit [`mprocs.yaml`](file:///home/skandergod/Workbench/stream-recorder/mprocs.yaml) with your desired streamers:
+   * Edit [`mprocs.yaml`](mprocs.yaml) with your desired streamers:
      ```yaml
      procs:
        streamer_one:
