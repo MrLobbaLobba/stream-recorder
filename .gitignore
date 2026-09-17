@@ -9,7 +9,8 @@ __pycache__/
 *.pyo
 
 # Captures and media
-captures/
+captures/*
+!captures/list
 *.ts
 *.mp4
 *.m4s
@@ -17,7 +18,11 @@ captures/
 *.png
 !assets/*.png
 
+# Logs
+*.log
+
 # Local backups and scratch
 requirements.txt.bak
 fanslymonitor.py
 .gemini/
+.entroly/

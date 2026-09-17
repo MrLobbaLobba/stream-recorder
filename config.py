@@ -16,7 +16,7 @@ headers = {
         'authority': 'apiv3.fansly.com',
         'accept': 'application/json, text/plain, */*',
         'accept-language': 'en;q=0.8,en-US;q=0.7',
-        'authorization': 'your_auth_token_here',  # Replace with your actual auth token
+        'authorization': 'your_auth_token_here',
         'origin': 'https://fansly.com',
         'referer': 'https://fansly.com/',
         'sec-ch-ua': '"Not.A/Brand";v="8", "Chromium";v="114", "Google Chrome";v="114"',
