@@ -28,10 +28,19 @@ captures/*
 .env.*.local
 !.env.example
 
+# mprocs local configuration
+mprocs.local.yaml
+mprocs.local.yml
+mprocs-local.yaml
+mprocs-local.yml
+mprocs*.local.*
+mprocs*.local
+
 # Local backups and scratch
 requirements.txt.bak
 fanslymonitor.py
 .gemini/
 .entroly/
+agents/
 .agents/
 openspec/
