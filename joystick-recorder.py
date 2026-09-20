@@ -52,6 +52,53 @@ token = THIS
 rcloneRemotePath = getattr(config, "rcloneRemotePath", "remote:JoystickVODS/")
 checkTimeout = getattr(config, "joystick_check_timeout", 120)
 
+_ALERT_COOLDOWNS = {}
+
+def trigger_alert(alert_key, title, message, level="warning", cooldown_seconds=3600):
+    """Notify the user via Console banner, Desktop (notify-send), and Discord Webhook with debounce."""
+    now = time.time()
+    if alert_key in _ALERT_COOLDOWNS and (now - _ALERT_COOLDOWNS[alert_key]) < cooldown_seconds:
+        return
+    _ALERT_COOLDOWNS[alert_key] = now
+
+    # 1. Console banner
+    print(f"\n{'=' * 65}", flush=True)
+    print(f"[ALERTA] {title.upper()}", flush=True)
+    print(f"{message}", flush=True)
+    print(f"{'=' * 65}\n", flush=True)
+
+    # 2. Desktop notification via Linux notify-send
+    try:
+        urgency = "critical" if level == "critical" else "normal"
+        subprocess.run(
+            ["notify-send", "-u", urgency, title, message],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False
+        )
+    except Exception:
+        pass
+
+    # 3. Discord Webhook notification
+    if getattr(config.webhooks, "enabled", False):
+        webhook_url = getattr(config.webhooks, "info_webhook", None) or getattr(config.webhooks, "live_webhook", None)
+        if webhook_url:
+            try:
+                mention = getattr(config.webhooks, "webhook_mention", "")
+                embed = DiscordEmbed(
+                    title=f"⚠️ {title}",
+                    description=message,
+                    color="ff4444" if level == "critical" else "ffaa00"
+                )
+                embed.set_timestamp()
+                webhook = DiscordWebhook(url=webhook_url)
+                if mention:
+                    webhook.content = f"{mention} Stream Recorder Alert"
+                webhook.add_embed(embed)
+                webhook.execute()
+            except Exception as e:
+                print(f"[debug] Failed to send Discord alert: {e}")
+
 
 def get_request_headers(include_auth=False):
     """Build request headers with User-Agent and Cookie from config."""
@@ -117,15 +164,29 @@ async def getChannelData(username):
             break
         # Fallback without cookie if cookie caused a 403 or 404
         if last_status in (403, 404):
+            trigger_alert(
+                "joystick_cookie_expired",
+                "Joystick: Cookie de sesión vencida",
+                f"La cookie JOYSTICK_COOKIE_STR fue rechazada (HTTP {last_status}). Se activa modo de respaldo público sin cookies.",
+                level="warning"
+            )
             html_no_cookie, status_no_cookie = await fetch_page(url, use_cookie=False)
             if html_no_cookie and status_no_cookie == 200:
                 html_text, last_status = html_no_cookie, status_no_cookie
                 break
+            else:
+                last_status = status_no_cookie
 
     if last_status != 200 or not html_text:
         err_msg = f"HTTP {last_status}"
         if last_status in (403, 503):
             err_msg = f"Cloudflare HTTP {last_status}"
+            trigger_alert(
+                "joystick_cloudflare_blocked",
+                "Joystick: Bloqueo de Cloudflare",
+                f"Cloudflare bloqueó el acceso a Joystick (HTTP {last_status}). Se requiere renovar JOYSTICK_COOKIE_STR o esperar.",
+                level="critical"
+            )
         return {"success": False, "is_live": False, "error": err_msg}
 
     # Extract Nuxt 3 data payload
@@ -246,6 +307,12 @@ async def recordLiveStream(filename, data):
 
             if not v_init:
                 print(f"[warning] Could not fetch video initialization segment. Aborting stream.")
+                trigger_alert(
+                    "joystick_token_expired",
+                    "Joystick: Token de streaming vencido",
+                    "El servidor de video de Joystick rechazó el token (HTTP 403). Es necesario renovar JOYSTICK_API_KEY en tu .env.",
+                    level="critical"
+                )
                 return None
 
             # Launch separate FFmpeg pipes for Video and Audio with fragmented MP4

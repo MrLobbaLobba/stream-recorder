@@ -186,6 +186,23 @@ JOYSTICK_COOKIE_STR="cf_clearance=...; application=...; user=..."
 
 ---
 
+### Checking & Renewing Credentials Without a Browser (`check-tokens.py`)
+
+You can check whether your cookies, Cloudflare clearances, and API keys are active or expired at any time without opening a browser:
+
+```bash
+# Verify all credentials in 1 second:
+python3 check-tokens.py
+
+# Interactive menu to renew expired credentials and save directly into .env:
+python3 check-tokens.py --renew
+```
+
+* **Desktop Notifications (`notify-send`)**: When running in the background, the recorder automatically triggers a native desktop alert on Linux if a cookie or token expires.
+* **Resilient Fallback**: If `JOYSTICK_COOKIE_STR` expires during monitoring, the recorder automatically falls back to clean public fetching so you never miss a public broadcast.
+
+---
+
 ## 3. Tracking Streamers & Storage Location
 
 ### Running on Linux

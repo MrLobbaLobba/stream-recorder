@@ -5,6 +5,7 @@ import os
 import signal
 import subprocess
 import sys
+import time
 
 from os.path import expanduser
 
@@ -40,6 +41,53 @@ token = THIS
 rcloneRemotePath = getattr(config, "rcloneRemotePath", "remote:FanslyVODS/")
 checkTimeout = getattr(config, "fansly_check_timeout", (2 * 65))
 
+_ALERT_COOLDOWNS = {}
+
+def trigger_alert(alert_key, title, message, level="warning", cooldown_seconds=3600):
+    """Notify the user via Console banner, Desktop (notify-send), and Discord Webhook with debounce."""
+    now = time.time()
+    if alert_key in _ALERT_COOLDOWNS and (now - _ALERT_COOLDOWNS[alert_key]) < cooldown_seconds:
+        return
+    _ALERT_COOLDOWNS[alert_key] = now
+
+    # 1. Console banner
+    print(f"\n{'=' * 65}", flush=True)
+    print(f"[ALERTA] {title.upper()}", flush=True)
+    print(f"{message}", flush=True)
+    print(f"{'=' * 65}\n", flush=True)
+
+    # 2. Desktop notification via Linux notify-send
+    try:
+        urgency = "critical" if level == "critical" else "normal"
+        subprocess.run(
+            ["notify-send", "-u", urgency, title, message],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False
+        )
+    except Exception:
+        pass
+
+    # 3. Discord Webhook notification
+    if getattr(config.webhooks, "enabled", False):
+        webhook_url = getattr(config.webhooks, "info_webhook", None) or getattr(config.webhooks, "live_webhook", None)
+        if webhook_url:
+            try:
+                mention = getattr(config.webhooks, "webhook_mention", "")
+                embed = DiscordEmbed(
+                    title=f"⚠️ {title}",
+                    description=message,
+                    color="ff4444" if level == "critical" else "ffaa00"
+                )
+                embed.set_timestamp()
+                webhook = DiscordWebhook(url=webhook_url)
+                if mention:
+                    webhook.content = f"{mention} Stream Recorder Alert"
+                webhook.add_embed(embed)
+                webhook.execute()
+            except Exception as e:
+                print(f"[debug] Failed to send Discord alert: {e}")
+
 async def getAccountData(account_url):
     resolver = aiohttp.resolver.AsyncResolver(
             nameservers=["8.8.8.8", "8.8.8.4", "1.1.1.1", "1.0.0.2"]
@@ -48,6 +96,14 @@ async def getAccountData(account_url):
     try:
         async with aiohttp.ClientSession(connector=connector, headers=config.headers) as session:
             async with session.get(account_url, timeout=aiohttp.ClientTimeout(total=20)) as response:
+                if response.status == 401:
+                    trigger_alert(
+                        "fansly_token_expired",
+                        "Fansly: Token de sesión vencido",
+                        "La API de Fansly devolvió HTTP 401 Unauthorized. Es necesario renovar FANSLY_TOKEN en tu archivo .env.",
+                        level="critical"
+                    )
+                    return None
                 json_data = await response.json()
                 if not json_data.get("success") or len(json_data.get("response", [])) == 0:
                     print(f"[warning] Could not retrieve account data: {json_data}")
@@ -96,6 +152,14 @@ async def getStreamData(stream_url):
     try:
         async with aiohttp.ClientSession(connector=connector, headers=config.headers) as session:
             async with session.get(stream_url, timeout=aiohttp.ClientTimeout(total=20)) as response:
+                if response.status == 401:
+                    trigger_alert(
+                        "fansly_token_expired",
+                        "Fansly: Token de sesión vencido",
+                        "La API de Fansly devolvió HTTP 401 Unauthorized al consultar el stream. Es necesario renovar FANSLY_TOKEN en tu archivo .env.",
+                        level="critical"
+                    )
+                    return {"success": False, "response": None}
                 data = await response.json()
 
         if not data or not data.get("success") or not data.get("response"):
