@@ -74,13 +74,15 @@ def get_request_headers(include_auth=False):
     return headers
 
 
-async def fetch_page(url):
+async def fetch_page(url, use_cookie=True):
     """Fetch URL using curl_cffi or aiohttp."""
     headers = get_request_headers(include_auth=False)
+    if not use_cookie and "Cookie" in headers:
+        del headers["Cookie"]
 
     if CURL_CFFI_AVAILABLE:
         try:
-            async with CurlAsyncSession(impersonate="chrome120") as s:
+            async with CurlAsyncSession(impersonate="firefox") as s:
                 r = await s.get(url, headers=headers, timeout=20)
                 return r.text, r.status_code
         except Exception as e:
@@ -110,14 +112,20 @@ async def getChannelData(username):
     html_text = None
     last_status = 404
     for url in channel_urls:
-        html_text, last_status = await fetch_page(url)
+        html_text, last_status = await fetch_page(url, use_cookie=True)
         if html_text and last_status == 200:
             break
+        # Fallback without cookie if cookie caused a 403 or 404
+        if last_status in (403, 404):
+            html_no_cookie, status_no_cookie = await fetch_page(url, use_cookie=False)
+            if html_no_cookie and status_no_cookie == 200:
+                html_text, last_status = html_no_cookie, status_no_cookie
+                break
 
-    if not html_text:
+    if last_status != 200 or not html_text:
         err_msg = f"HTTP {last_status}"
         if last_status in (403, 503):
-            err_msg = "offline / HTTP 403 (Ensure joystick_cookie_str is up-to-date in config.py)"
+            err_msg = f"Cloudflare HTTP {last_status}"
         return {"success": False, "is_live": False, "error": err_msg}
 
     # Extract Nuxt 3 data payload
@@ -202,7 +210,7 @@ async def recordLiveStream(filename, data):
     audio_folder = "tracks-a2"
     if CURL_CFFI_AVAILABLE:
         try:
-            async with CurlAsyncSession(impersonate="chrome120") as s:
+            async with CurlAsyncSession(impersonate="firefox") as s:
                 m_url = f"{base_playback}/index.m3u8?token={jwt_token}" if jwt_token else f"{base_playback}/index.m3u8"
                 m_resp = await fetch_with_retry(s, m_url, headers=headers, retries=3)
                 if m_resp:
@@ -231,7 +239,7 @@ async def recordLiveStream(filename, data):
     total_a_bytes = 0
 
     if CURL_CFFI_AVAILABLE:
-        async with CurlAsyncSession(impersonate="chrome120") as s:
+        async with CurlAsyncSession(impersonate="firefox") as s:
             # 1. Fetch init headers before launching FFmpeg
             v_init = await fetch_with_retry(s, v_init_url, headers=headers, retries=5)
             a_init = await fetch_with_retry(s, a_init_url, headers=headers, retries=5)
