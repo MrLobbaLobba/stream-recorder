@@ -63,7 +63,7 @@ def trigger_alert(alert_key, title, message, level="warning", cooldown_seconds=3
 
     # 1. Console banner
     print(f"\n{'=' * 65}", flush=True)
-    print(f"[ALERTA] {title.upper()}", flush=True)
+    print(f"[ALERT] {title.upper()}", flush=True)
     print(f"{message}", flush=True)
     print(f"{'=' * 65}\n", flush=True)
 
@@ -166,8 +166,8 @@ async def getChannelData(username):
         if last_status in (403, 404):
             trigger_alert(
                 "joystick_cookie_expired",
-                "Joystick: Cookie de sesión vencida",
-                f"La cookie JOYSTICK_COOKIE_STR fue rechazada (HTTP {last_status}). Se activa modo de respaldo público sin cookies.",
+                "Joystick: Session Cookie Expired",
+                f"Cookie JOYSTICK_COOKIE_STR was rejected (HTTP {last_status}). Resilient unauthenticated public fallback mode engaged.",
                 level="warning"
             )
             html_no_cookie, status_no_cookie = await fetch_page(url, use_cookie=False)
@@ -183,8 +183,8 @@ async def getChannelData(username):
             err_msg = f"Cloudflare HTTP {last_status}"
             trigger_alert(
                 "joystick_cloudflare_blocked",
-                "Joystick: Bloqueo de Cloudflare",
-                f"Cloudflare bloqueó el acceso a Joystick (HTTP {last_status}). Se requiere renovar JOYSTICK_COOKIE_STR o esperar.",
+                "Joystick: Cloudflare Block Detected",
+                f"Cloudflare blocked connection to Joystick (HTTP {last_status}). Renew JOYSTICK_COOKIE_STR or wait for challenge cooldown.",
                 level="critical"
             )
         return {"success": False, "is_live": False, "error": err_msg}
@@ -206,6 +206,17 @@ async def getChannelData(username):
                         is_live = True
                     elif "images.joystick.tv" in item and not avatar_url:
                         avatar_url = item
+
+            if is_live and playback_url:
+                # Probe the edge server to verify the stream is truly active (404 = stream ended/offline)
+                if CURL_CFFI_AVAILABLE:
+                    try:
+                        async with CurlAsyncSession(impersonate="firefox") as s:
+                            probe = await s.get(f"{playback_url}/init.hls.fmp4", timeout=6)
+                            if probe.status_code == 404:
+                                is_live = False
+                    except Exception:
+                        pass
 
             if is_live and playback_url:
                 jwt_token = getattr(config, "joystick_api_key", "").strip().replace("Bearer ", "")
@@ -309,8 +320,8 @@ async def recordLiveStream(filename, data):
                 print(f"[warning] Could not fetch video initialization segment. Aborting stream.")
                 trigger_alert(
                     "joystick_token_expired",
-                    "Joystick: Token de streaming vencido",
-                    "El servidor de video de Joystick rechazó el token (HTTP 403). Es necesario renovar JOYSTICK_API_KEY en tu .env.",
+                    "Joystick: Streaming Token Expired",
+                    "Joystick video distribution server rejected the token (HTTP 403). Please renew JOYSTICK_API_KEY in your .env file.",
                     level="critical"
                 )
                 return None

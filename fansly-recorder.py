@@ -52,7 +52,7 @@ def trigger_alert(alert_key, title, message, level="warning", cooldown_seconds=3
 
     # 1. Console banner
     print(f"\n{'=' * 65}", flush=True)
-    print(f"[ALERTA] {title.upper()}", flush=True)
+    print(f"[ALERT] {title.upper()}", flush=True)
     print(f"{message}", flush=True)
     print(f"{'=' * 65}\n", flush=True)
 
@@ -99,8 +99,8 @@ async def getAccountData(account_url):
                 if response.status == 401:
                     trigger_alert(
                         "fansly_token_expired",
-                        "Fansly: Token de sesión vencido",
-                        "La API de Fansly devolvió HTTP 401 Unauthorized. Es necesario renovar FANSLY_TOKEN en tu archivo .env.",
+                        "Fansly: Session Token Expired",
+                        "Fansly API returned HTTP 401 Unauthorized. Please renew FANSLY_TOKEN in your .env file.",
                         level="critical"
                     )
                     return None
@@ -155,8 +155,8 @@ async def getStreamData(stream_url):
                 if response.status == 401:
                     trigger_alert(
                         "fansly_token_expired",
-                        "Fansly: Token de sesión vencido",
-                        "La API de Fansly devolvió HTTP 401 Unauthorized al consultar el stream. Es necesario renovar FANSLY_TOKEN en tu archivo .env.",
+                        "Fansly: Session Token Expired",
+                        "Fansly API returned HTTP 401 Unauthorized while querying stream data. Please renew FANSLY_TOKEN in your .env file.",
                         level="critical"
                     )
                     return {"success": False, "response": None}

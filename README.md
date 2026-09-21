@@ -186,20 +186,62 @@ JOYSTICK_COOKIE_STR="cf_clearance=...; application=...; user=..."
 
 ---
 
-### Checking & Renewing Credentials Without a Browser (`check-tokens.py`)
+### Browser-Independent Credential Diagnostics & Renewal (`check-tokens.py`)
 
-You can check whether your cookies, Cloudflare clearances, and API keys are active or expired at any time without opening a browser:
+You can verify whether your session cookies, Cloudflare clearances, and streaming keys are valid or expired in ~1 second without launching or depending on any web browser:
 
 ```bash
-# Verify all credentials in 1 second:
+# Run diagnostics on all configured credentials:
 python3 check-tokens.py
-
-# Interactive menu to renew expired credentials and save directly into .env:
-python3 check-tokens.py --renew
 ```
 
-* **Desktop Notifications (`notify-send`)**: When running in the background, the recorder automatically triggers a native desktop alert on Linux if a cookie or token expires.
-* **Resilient Fallback**: If `JOYSTICK_COOKIE_STR` expires during monitoring, the recorder automatically falls back to clean public fetching so you never miss a public broadcast.
+Sample output:
+```text
+=================================================================
+       CREDENTIAL DIAGNOSTICS (BROWSER-INDEPENDENT)
+=================================================================
+[✓] Fansly Token: Valid (Connected as @username, ID: ...)
+[✓] Joystick Cookie (cf_clearance): Valid (HTTP 200 - Cloudflare clearance & site active)
+[✓] Joystick Streaming Key: Valid JWT token (User: username, ID: ...), Issued: ...
+=================================================================
+```
+
+#### Updating & Renewing Credentials Directly into `.env`:
+You can update expired tokens or cookies automatically without opening or manually editing files:
+
+* **Interactive CLI Menu**:
+  ```bash
+  python3 check-tokens.py --renew
+  ```
+  Presents an interactive menu, asks you to paste the new token or cookie, writes it safely into `.env`, and immediately re-validates the connection.
+
+* **Direct One-Line Commands**:
+  ```bash
+  # Update Joystick Cookie (Cloudflare cf_clearance & session):
+  python3 check-tokens.py --set-joystick-cookie "cf_clearance=...; user=..."
+
+  # Update Joystick Streaming Key (JWT Token):
+  python3 check-tokens.py --set-joystick-key "eyJhbGciOi..."
+
+  # Update Fansly Token:
+  python3 check-tokens.py --set-fansly "your_new_fansly_token"
+  ```
+
+---
+
+### Automated Multi-Channel Expiration Alerts
+
+Both recorders include an automated alert mechanism (`trigger_alert`) with a 1-hour debounce cooldown to notify you when credentials expire without flooding your console:
+
+1. **Linux Desktop Notifications (`notify-send`)**:
+   Automatically triggers a native system notification popup when running on Linux desktop environments (e.g. Ubuntu, Debian, Arch):
+   > *"Joystick: Session Cookie Expired"* or *"Fansly: Session Token Expired"*
+2. **Discord Webhooks**:
+   Sends an alert embed with user mentions directly to your configured Discord webhook (when `DISCORD_WEBHOOKS_ENABLED=true` in `.env`).
+3. **High-Visibility Console Banners**:
+   Prints a clear visual alert banner in the terminal logs detailing the exact cause and recommended fix.
+4. **Self-Healing Fallback for Joystick.tv**:
+   If `JOYSTICK_COOKIE_STR` expires during monitoring, the recorder automatically triggers a warning and switches to clean, unauthenticated public fetching. Because public channel pages on Joystick.tv do not require cookies, active streams continue to be detected and recorded without interruption.
 
 ---
 
