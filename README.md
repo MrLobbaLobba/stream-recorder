@@ -229,19 +229,23 @@ You can update expired tokens or cookies automatically without opening or manual
 
 ---
 
-### Automated Multi-Channel Expiration Alerts
+### Tracking Status & In-Console Credential Warnings
 
-Both recorders include an automated alert mechanism (`trigger_alert`) with a 1-hour debounce cooldown to notify you when credentials expire without flooding your console:
+The recorders monitor streamers silently in the background without intrusive desktop notifications or popups. Status and credential warnings are displayed directly inline in the console output while tracking:
 
-1. **Linux Desktop Notifications (`notify-send`)**:
-   Automatically triggers a native system notification popup when running on Linux desktop environments (e.g. Ubuntu, Debian, Arch):
-   > *"Joystick: Session Cookie Expired"* or *"Fansly: Session Token Expired"*
-2. **Discord Webhooks**:
-   Sends an alert embed with user mentions directly to your configured Discord webhook (when `DISCORD_WEBHOOKS_ENABLED=true` in `.env`).
-3. **High-Visibility Console Banners**:
-   Prints a clear visual alert banner in the terminal logs detailing the exact cause and recommended fix.
-4. **Self-Healing Fallback for Joystick.tv**:
-   If `JOYSTICK_COOKIE_STR` expires during monitoring, the recorder automatically triggers a warning and switches to clean, unauthenticated public fetching. Because public channel pages on Joystick.tv do not require cookies, active streams continue to be detected and recorded without interruption.
+* **Joystick.tv Public Fallback**: If `JOYSTICK_COOKIE_STR` expires or encounters a Cloudflare challenge, the recorder seamlessly falls back to unauthenticated public fetching so you never miss a broadcast, logging:
+  ```text
+  [info] <streamer> is offline (cookie expired, public fallback active), checking again in 120s
+  ```
+* **Fansly Token Status**: If `FANSLY_TOKEN` expires (HTTP 401), the monitor logs:
+  ```text
+  [info] <streamer> is offline (token expired: HTTP 401), checking again in 130s
+  ```
+* **Diagnostic & Renewal Tool**: To check or renew any token or cookie at any time without a browser, run:
+  ```bash
+  python3 check-tokens.py
+  python3 check-tokens.py --renew
+  ```
 
 ---
 

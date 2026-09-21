@@ -52,53 +52,6 @@ token = THIS
 rcloneRemotePath = getattr(config, "rcloneRemotePath", "remote:JoystickVODS/")
 checkTimeout = getattr(config, "joystick_check_timeout", 120)
 
-_ALERT_COOLDOWNS = {}
-
-def trigger_alert(alert_key, title, message, level="warning", cooldown_seconds=3600):
-    """Notify the user via Console banner, Desktop (notify-send), and Discord Webhook with debounce."""
-    now = time.time()
-    if alert_key in _ALERT_COOLDOWNS and (now - _ALERT_COOLDOWNS[alert_key]) < cooldown_seconds:
-        return
-    _ALERT_COOLDOWNS[alert_key] = now
-
-    # 1. Console banner
-    print(f"\n{'=' * 65}", flush=True)
-    print(f"[ALERT] {title.upper()}", flush=True)
-    print(f"{message}", flush=True)
-    print(f"{'=' * 65}\n", flush=True)
-
-    # 2. Desktop notification via Linux notify-send
-    try:
-        urgency = "critical" if level == "critical" else "normal"
-        subprocess.run(
-            ["notify-send", "-u", urgency, title, message],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False
-        )
-    except Exception:
-        pass
-
-    # 3. Discord Webhook notification
-    if getattr(config.webhooks, "enabled", False):
-        webhook_url = getattr(config.webhooks, "info_webhook", None) or getattr(config.webhooks, "live_webhook", None)
-        if webhook_url:
-            try:
-                mention = getattr(config.webhooks, "webhook_mention", "")
-                embed = DiscordEmbed(
-                    title=f"⚠️ {title}",
-                    description=message,
-                    color="ff4444" if level == "critical" else "ffaa00"
-                )
-                embed.set_timestamp()
-                webhook = DiscordWebhook(url=webhook_url)
-                if mention:
-                    webhook.content = f"{mention} Stream Recorder Alert"
-                webhook.add_embed(embed)
-                webhook.execute()
-            except Exception as e:
-                print(f"[debug] Failed to send Discord alert: {e}")
-
 
 def get_request_headers(include_auth=False):
     """Build request headers with User-Agent and Cookie from config."""
@@ -158,18 +111,14 @@ async def getChannelData(username):
 
     html_text = None
     last_status = 404
+    cookie_fallback = False
     for url in channel_urls:
         html_text, last_status = await fetch_page(url, use_cookie=True)
         if html_text and last_status == 200:
             break
         # Fallback without cookie if cookie caused a 403 or 404
         if last_status in (403, 404):
-            trigger_alert(
-                "joystick_cookie_expired",
-                "Joystick: Session Cookie Expired",
-                f"Cookie JOYSTICK_COOKIE_STR was rejected (HTTP {last_status}). Resilient unauthenticated public fallback mode engaged.",
-                level="warning"
-            )
+            cookie_fallback = True
             html_no_cookie, status_no_cookie = await fetch_page(url, use_cookie=False)
             if html_no_cookie and status_no_cookie == 200:
                 html_text, last_status = html_no_cookie, status_no_cookie
@@ -181,13 +130,7 @@ async def getChannelData(username):
         err_msg = f"HTTP {last_status}"
         if last_status in (403, 503):
             err_msg = f"Cloudflare HTTP {last_status}"
-            trigger_alert(
-                "joystick_cloudflare_blocked",
-                "Joystick: Cloudflare Block Detected",
-                f"Cloudflare blocked connection to Joystick (HTTP {last_status}). Renew JOYSTICK_COOKIE_STR or wait for challenge cooldown.",
-                level="critical"
-            )
-        return {"success": False, "is_live": False, "error": err_msg}
+        return {"success": False, "is_live": False, "error": err_msg, "cookie_fallback": cookie_fallback}
 
     # Extract Nuxt 3 data payload
     nuxt_match = re.search(r'<script[^>]*id="__NUXT_DATA__"[^>]*>(.*?)</script>', html_text, re.DOTALL)
@@ -223,6 +166,7 @@ async def getChannelData(username):
                 return {
                     "success": True,
                     "is_live": True,
+                    "cookie_fallback": cookie_fallback,
                     "channel": {
                         "username": username,
                         "id": username,
@@ -241,6 +185,7 @@ async def getChannelData(username):
     return {
         "success": True,
         "is_live": False,
+        "cookie_fallback": cookie_fallback,
         "channel": {
             "username": username,
             "id": username,
@@ -317,13 +262,7 @@ async def recordLiveStream(filename, data):
             a_init = await fetch_with_retry(s, a_init_url, headers=headers, retries=5)
 
             if not v_init:
-                print(f"[warning] Could not fetch video initialization segment. Aborting stream.")
-                trigger_alert(
-                    "joystick_token_expired",
-                    "Joystick: Streaming Token Expired",
-                    "Joystick video distribution server rejected the token (HTTP 403). Please renew JOYSTICK_API_KEY in your .env file.",
-                    level="critical"
-                )
+                print(f"[warning] Could not fetch video initialization segment (token may be expired). Aborting stream.", flush=True)
                 return None
 
             # Launch separate FFmpeg pipes for Video and Audio with fragmented MP4
@@ -664,7 +603,8 @@ async def Start():
                     break
             else:
                 status_msg = data.get("error", "offline")
-                print(f"[info] {username} is {status_msg}, checking again in {checkTimeout}s")
+                cookie_note = " (cookie expired, public fallback active)" if data.get("cookie_fallback") else ""
+                print(f"[info] {username} is {status_msg}{cookie_note}, checking again in {checkTimeout}s", flush=True)
                 await asyncio.sleep(checkTimeout)
 
         except Exception as e:
