@@ -45,7 +45,6 @@ joystick_api_key = os.getenv('JOYSTICK_API_KEY', '')
 joystick_headers = {
     'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
     'accept-language': 'es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3',
-    'origin': 'https://joystick.tv',
     'referer': 'https://joystick.tv/',
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0',
 }

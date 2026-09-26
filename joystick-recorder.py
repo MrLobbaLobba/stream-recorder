@@ -61,6 +61,8 @@ def get_request_headers(include_auth=False):
         "Accept-Language": "es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3",
         "Referer": "https://joystick.tv/",
     }))
+    headers.pop("origin", None)
+    headers.pop("Origin", None)
     
     cookie_str = getattr(config, "joystick_cookie_str", "").strip()
     if cookie_str:
@@ -74,11 +76,18 @@ def get_request_headers(include_auth=False):
     return headers
 
 
-async def fetch_page(url, use_cookie=True):
-    """Fetch URL using curl_cffi or aiohttp."""
+async def fetch_page(url, cookie_mode="full"):
+    """Fetch URL using curl_cffi or aiohttp with cookie modes: 'full', 'cf_only', 'none'."""
     headers = get_request_headers(include_auth=False)
-    if not use_cookie and "Cookie" in headers:
-        del headers["Cookie"]
+    if "Cookie" in headers:
+        if cookie_mode == "none":
+            del headers["Cookie"]
+        elif cookie_mode == "cf_only":
+            cf_cookies = [c.strip() for c in headers["Cookie"].split(";") if any(k in c for k in ("cf_clearance", "__cf_bm"))]
+            if cf_cookies:
+                headers["Cookie"] = "; ".join(cf_cookies)
+            else:
+                del headers["Cookie"]
 
     if CURL_CFFI_AVAILABLE:
         try:
@@ -113,18 +122,22 @@ async def getChannelData(username):
     last_status = 404
     cookie_fallback = False
     for url in channel_urls:
-        html_text, last_status = await fetch_page(url, use_cookie=True)
+        html_text, last_status = await fetch_page(url, cookie_mode="full")
         if html_text and last_status == 200:
             break
-        # Fallback without cookie if cookie caused a 403 or 404
+        # Fallback 1: Try with cf_clearance only (drops broken user session while bypassing Cloudflare)
         if last_status in (403, 404):
             cookie_fallback = True
-            html_no_cookie, status_no_cookie = await fetch_page(url, use_cookie=False)
-            if html_no_cookie and status_no_cookie == 200:
-                html_text, last_status = html_no_cookie, status_no_cookie
+            html_cf, status_cf = await fetch_page(url, cookie_mode="cf_only")
+            if html_cf and status_cf == 200:
+                html_text, last_status = html_cf, status_cf
                 break
-            else:
-                last_status = status_no_cookie
+            # Fallback 2: Try without any cookies
+            html_none, status_none = await fetch_page(url, cookie_mode="none")
+            if html_none and status_none == 200:
+                html_text, last_status = html_none, status_none
+                break
+            last_status = status_cf if status_cf != 200 else status_none
 
     if last_status != 200 or not html_text:
         err_msg = f"HTTP {last_status}"
