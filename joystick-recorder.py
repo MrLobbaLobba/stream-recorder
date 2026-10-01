@@ -169,18 +169,17 @@ async def getChannelData(username):
                         avatar_url = item
 
             if is_live and playback_url:
+                jwt_token = getattr(config, "joystick_api_key", "").strip().replace("Bearer ", "")
                 # Probe the edge server to verify the stream is truly active (404 = stream ended/offline)
                 if CURL_CFFI_AVAILABLE:
                     try:
+                        probe_url = f"{playback_url}/index.m3u8?token={jwt_token}" if jwt_token else f"{playback_url}/index.m3u8"
                         async with CurlAsyncSession(impersonate=JOYSTICK_IMPERSONATE) as s:
-                            probe = await s.get(f"{playback_url}/init.hls.fmp4", timeout=6)
+                            probe = await s.get(probe_url, timeout=6)
                             if probe.status_code == 404:
                                 is_live = False
                     except Exception:
                         pass
-
-            if is_live and playback_url:
-                jwt_token = getattr(config, "joystick_api_key", "").strip().replace("Bearer ", "")
                 return {
                     "success": True,
                     "is_live": True,
