@@ -79,9 +79,16 @@ def check_joystick_cookie():
 
     headers = {"Cookie": cookie_str}
     try:
+        r = None
         if CURL_AVAILABLE:
-            r = curl_requests.get("https://joystick.tv/", headers=headers, impersonate="firefox", timeout=12)
-        else:
+            for imp in ["chrome120", "safari15_5", "firefox"]:
+                try:
+                    r = curl_requests.get("https://joystick.tv/", headers=headers, impersonate=imp, timeout=12)
+                    if r.status_code == 200:
+                        break
+                except Exception:
+                    pass
+        if r is None:
             r = curl_requests.get("https://joystick.tv/", headers=headers, timeout=12)
 
         if r.status_code == 200:

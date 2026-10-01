@@ -76,6 +76,9 @@ def get_request_headers(include_auth=False):
     return headers
 
 
+JOYSTICK_IMPERSONATE = getattr(config, "joystick_impersonate", "chrome120")
+
+
 async def fetch_page(url, cookie_mode="full"):
     """Fetch URL using curl_cffi or aiohttp with cookie modes: 'full', 'cf_only', 'none'."""
     headers = get_request_headers(include_auth=False)
@@ -90,13 +93,15 @@ async def fetch_page(url, cookie_mode="full"):
                 del headers["Cookie"]
 
     if CURL_CFFI_AVAILABLE:
-        try:
-            async with CurlAsyncSession(impersonate="firefox") as s:
-                r = await s.get(url, headers=headers, timeout=20)
-                return r.text, r.status_code
-        except Exception as e:
-            print(f"[debug] fetch error for {url}: {e}")
-            return None, 500
+        for imp in ["chrome120", "safari15_5", "firefox"]:
+            try:
+                async with CurlAsyncSession(impersonate=imp) as s:
+                    r = await s.get(url, headers=headers, timeout=20)
+                    if r.status_code != 403 or imp == "firefox":
+                        return r.text, r.status_code
+            except Exception:
+                continue
+        return None, 500
 
     # Fallback to aiohttp if curl_cffi not installed
     import aiohttp
@@ -167,7 +172,7 @@ async def getChannelData(username):
                 # Probe the edge server to verify the stream is truly active (404 = stream ended/offline)
                 if CURL_CFFI_AVAILABLE:
                     try:
-                        async with CurlAsyncSession(impersonate="firefox") as s:
+                        async with CurlAsyncSession(impersonate=JOYSTICK_IMPERSONATE) as s:
                             probe = await s.get(f"{playback_url}/init.hls.fmp4", timeout=6)
                             if probe.status_code == 404:
                                 is_live = False
@@ -240,7 +245,7 @@ async def recordLiveStream(filename, data):
     audio_folder = "tracks-a2"
     if CURL_CFFI_AVAILABLE:
         try:
-            async with CurlAsyncSession(impersonate="firefox") as s:
+            async with CurlAsyncSession(impersonate=JOYSTICK_IMPERSONATE) as s:
                 m_url = f"{base_playback}/index.m3u8?token={jwt_token}" if jwt_token else f"{base_playback}/index.m3u8"
                 m_resp = await fetch_with_retry(s, m_url, headers=headers, retries=3)
                 if m_resp:
@@ -269,7 +274,7 @@ async def recordLiveStream(filename, data):
     total_a_bytes = 0
 
     if CURL_CFFI_AVAILABLE:
-        async with CurlAsyncSession(impersonate="firefox") as s:
+        async with CurlAsyncSession(impersonate=JOYSTICK_IMPERSONATE) as s:
             # 1. Fetch init headers before launching FFmpeg
             v_init = await fetch_with_retry(s, v_init_url, headers=headers, retries=5)
             a_init = await fetch_with_retry(s, a_init_url, headers=headers, retries=5)
