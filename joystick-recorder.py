@@ -170,6 +170,7 @@ async def getChannelData(username):
 
             if is_live and playback_url:
                 jwt_token = getattr(config, "joystick_api_key", "").strip().replace("Bearer ", "")
+                token_rejected = False
                 # Probe the edge server to verify the stream is truly active (404 = stream ended/offline)
                 if CURL_CFFI_AVAILABLE:
                     try:
@@ -178,11 +179,14 @@ async def getChannelData(username):
                             probe = await s.get(probe_url, timeout=6)
                             if probe.status_code == 404:
                                 is_live = False
+                            elif probe.status_code == 403:
+                                token_rejected = True
                     except Exception:
                         pass
                 return {
                     "success": True,
-                    "is_live": True,
+                    "is_live": is_live,
+                    "token_rejected": token_rejected,
                     "cookie_fallback": cookie_fallback,
                     "channel": {
                         "username": username,
@@ -611,6 +615,10 @@ async def Start():
             data = await getChannelData(username)
 
             if data.get("success") and data.get("is_live") and data.get("stream"):
+                if data.get("token_rejected"):
+                    print(f"[warning] {username} is ONLINE, but video stream was rejected (HTTP 403 Forbidden). Token expired or lacks permission. Renew JOYSTICK_API_KEY in .env. Checking again in {checkTimeout}s", flush=True)
+                    await asyncio.sleep(checkTimeout)
+                    continue
                 print(f"[info] {username} is ONLINE! Starting capture...")
                 if getattr(config.webhooks, "enabled", False):
                     await sendWebhookLive(data)
